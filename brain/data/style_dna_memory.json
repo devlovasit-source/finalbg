@@ -1,0 +1,67 @@
+{
+  "users": {
+    "demo_user": {
+      "style": "minimal",
+      "preferred_colors": [
+        "navy",
+        "white"
+      ],
+      "preferred_fabrics": [],
+      "preferred_styles": [
+        "minimal"
+      ],
+      "preferred_types": [],
+      "disliked_items": []
+    },
+    "user_demo_1": {
+      "style": "casual",
+      "preferred_colors": [],
+      "preferred_fabrics": [],
+      "preferred_styles": [
+        "casual"
+      ],
+      "preferred_types": [],
+      "disliked_items": []
+    },
+    "user_User": {
+      "style": "casual",
+      "preferred_colors": [],
+      "preferred_fabrics": [],
+      "preferred_styles": [
+        "casual"
+      ],
+      "preferred_types": [],
+      "disliked_items": []
+    },
+    "user_Dev-LovasIT": {
+      "style": "casual",
+      "preferred_colors": [],
+      "preferred_fabrics": [],
+      "preferred_styles": [
+        "casual"
+      ],
+      "preferred_types": [],
+      "disliked_items": []
+    },
+    "user_Stylist": {
+      "style": "casual",
+      "preferred_colors": [],
+      "preferred_fabrics": [],
+      "preferred_styles": [
+        "casual"
+      ],
+      "preferred_types": [],
+      "disliked_items": []
+    },
+    "69c9290346f95d0d1b4a": {
+      "style": "casual",
+      "preferred_colors": [],
+      "preferred_fabrics": [],
+      "preferred_styles": [
+        "casual"
+      ],
+      "preferred_types": [],
+      "disliked_items": []
+    }
+  }
+}
