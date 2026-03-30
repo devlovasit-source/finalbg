@@ -173,6 +173,9 @@ class QdrantService:
     def upsert_item(self, item_id: str, vector: list, payload: dict):
         if not self._ensure_ready():
             return
+        if not str((payload or {}).get("userId", "")).strip():
+            print("Upsert skipped: missing userId in payload")
+            return
         try:
             self.client.upsert(
                 collection_name=self.collection,
@@ -183,6 +186,9 @@ class QdrantService:
 
     def upsert_memory_vector(self, point_id: str, vector: list, payload: dict):
         if not self._ensure_ready():
+            return
+        if not str((payload or {}).get("userId", "")).strip():
+            print("Memory upsert skipped: missing userId in payload")
             return
         try:
             self.client.upsert(

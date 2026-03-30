@@ -15,6 +15,7 @@ from services.rate_limiter import (
     limiter,
     rate_limit_exceeded_handler,
 )
+from services.security_limits import increment_rate_counter, token_subject
 from services.settings import configure_logging, get_settings
 
 configure_logging()
@@ -111,6 +112,7 @@ if _sentry_dsn and sentry_sdk and FastApiIntegration:
     sentry_sdk.init(
         dsn=_sentry_dsn,
         traces_sample_rate=1.0,
+        send_default_pii=False,
         integrations=[FastApiIntegration()],
     )
 
@@ -129,6 +131,68 @@ if RATE_LIMITING_AVAILABLE:
     app.add_middleware(SlowAPIMiddleware)
 
 logger.info("AHVI backend started")
+
+
+_HEAVY_UPLOAD_PATHS = (
+    "/api/bg-remove",
+    "/api/background/remove-bg",
+    "/api/background/remove-bg/async",
+    "/api/vision/analyze-image",
+    "/api/vision/analyze-image/async",
+    "/api/wardrobe/capture/analyze",
+    "/api/wardrobe/capture/analyze/async",
+    "/api/wardrobe/capture/process-upload/async",
+    "/api/uploads/avatar",
+    "/api/uploads/wardrobe",
+    "/api/garment/analyze",
+    "/api/garment/analyze/",
+)
+
+_API_PREFIXES = ("/api", "/garment")
+
+
+@app.middleware("http")
+async def upload_size_guard(request: Request, call_next):
+    path = request.url.path or ""
+    if any(path.startswith(p) for p in _API_PREFIXES):
+        client_ip = (request.client.host if request.client else "") or "unknown"
+        if increment_rate_counter("ip", client_ip, limit=60, window_seconds=60):
+            return JSONResponse(
+                status_code=429,
+                content={"success": False, "error": {"code": "IP_RATE_LIMITED", "message": "Too many requests from this IP"}},
+            )
+
+        auth_header = request.headers.get("authorization", "")
+        token_key = token_subject(auth_header)
+        if token_key and increment_rate_counter("user_token", token_key, limit=100, window_seconds=60):
+            return JSONResponse(
+                status_code=429,
+                content={"success": False, "error": {"code": "USER_RATE_LIMITED", "message": "Too many requests for this user token"}},
+            )
+
+    if request.method.upper() in {"POST", "PUT", "PATCH"}:
+        if any(path.startswith(p) for p in _HEAVY_UPLOAD_PATHS):
+            cl_header = request.headers.get("content-length", "").strip()
+            if cl_header:
+                try:
+                    content_length = int(cl_header)
+                except Exception:
+                    return JSONResponse(
+                        status_code=400,
+                        content={"success": False, "error": {"code": "BAD_CONTENT_LENGTH", "message": "Invalid content-length header"}},
+                    )
+                if content_length > int(settings.MAX_UPLOAD_BYTES):
+                    return JSONResponse(
+                        status_code=413,
+                        content={
+                            "success": False,
+                            "error": {
+                                "code": "REQUEST_TOO_LARGE",
+                                "message": f"Payload exceeds max allowed size of {int(settings.MAX_UPLOAD_BYTES)} bytes",
+                            },
+                        },
+                    )
+    return await call_next(request)
 
 
 # -------------------------

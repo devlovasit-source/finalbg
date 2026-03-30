@@ -12,6 +12,7 @@ from transformers import AutoModelForImageSegmentation
 from torchvision import transforms
 from fastapi import status
 from middleware.auth_middleware import get_current_user
+from services.image_validation import validate_image_bytes
 from services.rate_limiter import limiter
 from services.task_claim_check import store_image_claim_check
 
@@ -329,6 +330,7 @@ async def remove_background(request: Request, payload: BGRemoveRequest, user=Dep
 
         if len(image_data) > 5 * 1024 * 1024:
             raise HTTPException(status_code=413, detail="Image too large")
+        validate_image_bytes(image_data, allowed_formats=("PNG", "JPEG"), field_name="image_base64")
 
         if model_instance is None and onnx_instance is None:
             detail = "Model unavailable"

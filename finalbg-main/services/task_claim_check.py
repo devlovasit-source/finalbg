@@ -6,6 +6,7 @@ from typing import Tuple
 
 from fastapi import HTTPException
 
+from services.image_validation import validate_image_bytes
 from services.r2_storage import R2Storage, R2StorageError
 
 
@@ -35,6 +36,12 @@ def decode_image_base64_payload(image_base64: str, *, max_bytes: int = MAX_CLAIM
         raise HTTPException(status_code=400, detail="Decoded image payload is empty")
     if len(image_bytes) > max_bytes:
         raise HTTPException(status_code=413, detail=f"Image too large (max {max_bytes // (1024 * 1024)}MB)")
+    detected_format = validate_image_bytes(
+        image_bytes,
+        allowed_formats=("PNG", "JPEG"),
+        field_name="image_base64",
+    )
+    extension = "jpg" if detected_format == "JPEG" else "png"
     return image_bytes, extension
 
 

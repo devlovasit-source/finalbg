@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from services.r2_storage import R2Storage, R2StorageError
 from services.qdrant_service import qdrant_service
+from services.image_validation import validate_image_bytes
 
 router = APIRouter(tags=["utilities"])
 
@@ -47,6 +48,7 @@ def _decode_base64_image(value: str, *, max_bytes: int, field_name: str) -> byte
         raise HTTPException(status_code=400, detail=f"{field_name} is empty")
     if len(data) > max_bytes:
         raise HTTPException(status_code=413, detail=f"{field_name} too large (max {max_bytes // (1024 * 1024)}MB)")
+    validate_image_bytes(data, allowed_formats=("PNG", "JPEG"), field_name=field_name)
     return data
 
 

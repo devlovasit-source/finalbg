@@ -5,8 +5,6 @@ from typing import Any, Dict, List, Optional
 import requests
 from requests.exceptions import RequestException
 
-from services.settings import get_settings
-
 logger = logging.getLogger("ahvi.appwrite_proxy")
 
 
@@ -203,7 +201,7 @@ class AppwriteProxy:
         collection_id = self._collection_id(resource)
         user_field = self.user_field_map.get(resource)
         safe_limit = max(1, min(int(limit), 5000))
-        page_size = max(1, min(int(get_settings().APPWRITE_PAGE_SIZE), 100))
+        page_size = max(1, min(int(os.getenv("APPWRITE_PAGE_SIZE", "100")), 100))
         docs: List[Dict[str, Any]] = []
         offset = 0
         max_pages = max(1, (safe_limit + page_size - 1) // page_size)

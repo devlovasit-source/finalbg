@@ -15,6 +15,7 @@ from brain.orchestrator import ahvi_orchestrator
 from brain.outfit_pipeline import save_feedback
 from services.appwrite_proxy import AppwriteProxy
 from middleware.auth_middleware import ensure_user_scope, get_current_user
+from services.prompt_safety import detect_prompt_injection
 
 # ?? NEW
 from services.weather_service import get_hourly_weather
@@ -156,6 +157,12 @@ async def text_chat(request: TextChatRequest, user=Depends(get_current_user)):
 
     if not user_input:
         raise HTTPException(status_code=400, detail="Empty message")
+    blocked, signature = detect_prompt_injection(user_input)
+    if blocked:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Potential prompt-injection content detected ({signature}). Please rephrase your request.",
+        )
 
     resolved_user_id = request.user_id or request.userID or user.get("user_id") or "user_1"
     if isinstance(user, dict) and user.get("user_id"):
@@ -343,6 +350,12 @@ def organize_chips(request: OrganizeHubRequest, user=Depends(get_current_user)):
 @router.post("/plan-pack")
 def plan_pack(request: PlanPackRequest, user=Depends(get_current_user)):
     ensure_user_scope(user, request.user_id)
+    blocked, signature = detect_prompt_injection(request.prompt)
+    if blocked:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Potential prompt-injection content detected ({signature}). Please rephrase your request.",
+        )
     try:
         weather_data = {}
         try:

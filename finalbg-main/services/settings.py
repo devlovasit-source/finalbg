@@ -5,7 +5,7 @@ import os
 from functools import lru_cache
 from typing import List, Optional
 
-from pydantic import Field, model_validator
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -24,6 +24,7 @@ class AppSettings(BaseSettings):
     ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:8081"
     DEFAULT_WARDROBE_FETCH_LIMIT: int = 1000
     APPWRITE_PAGE_SIZE: int = 100
+    MAX_UPLOAD_BYTES: int = 5 * 1024 * 1024
 
     APPWRITE_ENDPOINT: Optional[str] = None
     EXPO_PUBLIC_APPWRITE_ENDPOINT: Optional[str] = None

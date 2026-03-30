@@ -1,4 +1,4 @@
-﻿from fastapi import APIRouter, File, UploadFile, HTTPException
+from fastapi import APIRouter, Depends, File, UploadFile, HTTPException
 from PIL import Image
 from transformers import pipeline
 import io
@@ -6,6 +6,8 @@ import cv2
 import numpy as np
 from sklearn.cluster import KMeans
 from collections import Counter
+from middleware.auth_middleware import get_current_user
+from services.image_validation import validate_image_bytes
 
 # Set up the router
 router = APIRouter(
@@ -69,9 +71,14 @@ def get_dominant_color(cv_image, k=4):
 
 
 @router.post("/analyze/")
-def analyze_garment(image_file: UploadFile = File(...)):
+def analyze_garment(image_file: UploadFile = File(...), user=Depends(get_current_user)):
     try:
+        if image_file.content_type not in {"image/jpeg", "image/png"}:
+            raise HTTPException(status_code=415, detail="Only image/jpeg and image/png are allowed")
         contents = image_file.file.read()
+        if len(contents) > 5 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="Image too large (max 5MB)")
+        validate_image_bytes(contents, allowed_formats=("PNG", "JPEG"), field_name="image_file")
         pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
         np_img = np.frombuffer(contents, np.uint8)
         cv_image = cv2.imdecode(np_img, cv2.IMREAD_COLOR)
@@ -115,3 +122,5 @@ def analyze_garment(image_file: UploadFile = File(...)):
     except Exception as e:
         print(f"Server Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+

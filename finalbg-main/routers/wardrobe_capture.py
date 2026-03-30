@@ -12,6 +12,7 @@ from PIL import Image, ImageDraw
 from middleware.auth_middleware import ensure_user_scope, get_current_user
 from services.appwrite_proxy import AppwriteProxy
 from services.embedding_service import encode_metadata
+from services.image_validation import validate_image_bytes
 from services.qdrant_service import qdrant_service
 from services.rate_limiter import limiter
 from services.r2_storage import R2Storage, R2StorageError
@@ -158,6 +159,7 @@ def _decode_image_base64(value: str) -> Image.Image:
         raise HTTPException(status_code=400, detail=f"Invalid image_base64: {exc}")
     if len(data) > 15 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Image too large (max 15MB)")
+    validate_image_bytes(data, allowed_formats=("PNG", "JPEG"), field_name="image_base64")
     try:
         image = Image.open(io.BytesIO(data)).convert("RGB")
     except Exception as exc:
