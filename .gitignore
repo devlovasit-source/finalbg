@@ -4,3 +4,4 @@
 *.onnx
 RMBG_2_0/onnx/
 
+.env
