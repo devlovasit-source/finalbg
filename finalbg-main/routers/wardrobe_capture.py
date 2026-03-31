@@ -157,8 +157,8 @@ def _decode_image_base64(value: str) -> Image.Image:
         data = base64.b64decode(text, validate=True)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Invalid image_base64: {exc}")
-    if len(data) > 15 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="Image too large (max 15MB)")
+    if len(data) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Image too large (max 5MB)")
     validate_image_bytes(data, allowed_formats=("PNG", "JPEG"), field_name="image_base64")
     try:
         image = Image.open(io.BytesIO(data)).convert("RGB")

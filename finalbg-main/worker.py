@@ -63,7 +63,7 @@ celery_app.conf.update(
     enable_utc=True,
 )
 
-MAX_CLAIM_IMAGE_BYTES = 15 * 1024 * 1024
+MAX_CLAIM_IMAGE_BYTES = 5 * 1024 * 1024
 configure_logging()
 logger = logging.getLogger("ahvi.worker")
 

@@ -5,3 +5,6 @@
 RMBG_2_0/onnx/
 
 .env
+# TLS certs (local/deploy secrets)
+deploy/nginx/certs/*
+!deploy/nginx/certs/.gitkeep

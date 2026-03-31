@@ -18,6 +18,7 @@ class AppSettings(BaseSettings):
     )
 
     APP_ENV: str = "development"
+    ENVIRONMENT: str = "development"
     LOG_LEVEL: str = "INFO"
     STRICT_ENV_VALIDATION: bool = True
 
@@ -35,6 +36,15 @@ class AppSettings(BaseSettings):
     APPWRITE_API_KEY: Optional[str] = None
     EXPO_PUBLIC_APPWRITE_API_KEY: Optional[str] = None
     APPWRITE_KEY: Optional[str] = None
+
+    @property
+    def is_production(self) -> bool:
+        env = (self.ENVIRONMENT or self.APP_ENV or "").strip().lower()
+        return env in {"prod", "production"}
+
+    @property
+    def docs_enabled(self) -> bool:
+        return not self.is_production
 
     @property
     def cors_origins(self) -> List[str]:

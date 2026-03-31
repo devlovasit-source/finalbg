@@ -22,6 +22,7 @@ name, category, sub_category, occasions, pattern.
 Do not include markdown fences or extra text.
 """
 from services.embedding_service import encode_metadata
+from services.image_validation import validate_image_bytes
 from services.qdrant_service import qdrant_service
 from middleware.auth_middleware import ensure_user_scope, get_current_user
 from services.rate_limiter import limiter
@@ -256,8 +257,9 @@ def analyze_image(request: Request, payload: ImageAnalyzeRequest, user=Depends(g
 
     try:
         img_data = base64.b64decode(base64_data, validate=True)
-        if len(img_data) > 12 * 1024 * 1024:
-            raise HTTPException(status_code=413, detail="image payload too large (max 12MB)")
+        if len(img_data) > 5 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="image payload too large (max 5MB)")
+        validate_image_bytes(img_data, allowed_formats=("PNG", "JPEG"), field_name="image_base64")
 
         np_arr = np.frombuffer(img_data, np.uint8)
         decoded = cv2.imdecode(np_arr, cv2.IMREAD_UNCHANGED)

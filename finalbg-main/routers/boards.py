@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from middleware.auth_middleware import ensure_user_scope, get_current_user
 from services.appwrite_proxy import AppwriteProxy, AppwriteProxyError
+from services.image_validation import validate_image_bytes
 from services.r2_storage import R2Storage, R2StorageError
 
 router = APIRouter(prefix="/api/boards", tags=["boards"])
@@ -65,8 +66,10 @@ def _decode_image_base64(value: str) -> tuple[bytes, str]:
 
     if not data:
         raise HTTPException(status_code=400, detail="image_base64 is empty")
-    if len(data) > 12 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="image_base64 too large (max 12MB)")
+    if len(data) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="image_base64 too large (max 5MB)")
+    detected = validate_image_bytes(data, allowed_formats=("PNG", "JPEG"), field_name="image_base64")
+    extension = "jpg" if detected == "JPEG" else "png"
 
     return data, extension
 

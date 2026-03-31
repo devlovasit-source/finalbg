@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import logging
 
+import importlib
 import importlib.util
 import os
 
@@ -36,13 +37,17 @@ def _has_module(name: str) -> bool:
 
 def _load_optional_router(module_name: str, attr: str = "router"):
     if not _has_module(module_name):
-        logger.warning("Skipping %s (not found)", module_name)
+        logger.error("Router module not found: %s", module_name)
+        if settings.is_production:
+            raise RuntimeError(f"CRITICAL MVP FAILURE: Router {module_name} failed to load (module not found).")
         return None
     try:
-        module = __import__(module_name, fromlist=[attr])
+        module = importlib.import_module(module_name)
         return getattr(module, attr)
-    except Exception:
+    except Exception as exc:
         logger.exception("%s failed", module_name)
+        if settings.is_production:
+            raise RuntimeError(f"CRITICAL MVP FAILURE: Router {module_name} failed to load.") from exc
         return None
 
 
@@ -65,21 +70,45 @@ reddit_router = _load_optional_router("routers.reddit")
 # Feature-based
 bg_router = None
 if os.getenv("ENABLE_BG_REMOVER", "false").lower() in ("1", "true", "yes"):
-    if all(_has_module(m) for m in ["transformers", "torch", "torchvision", "PIL"]):
+    bg_required_modules = ["transformers", "torch", "torchvision", "PIL"]
+    missing_bg_modules = [m for m in bg_required_modules if not _has_module(m)]
+    if missing_bg_modules:
+        logger.error("bg_remover dependencies missing: %s", ", ".join(missing_bg_modules))
+        if settings.is_production:
+            raise RuntimeError("CRITICAL MVP FAILURE: bg_remover dependencies missing.")
+    else:
         bg_router = _load_optional_router("routers.bg_remover")
 
 vision_router = None
 if os.getenv("ENABLE_VISION", "false").lower() in ("1", "true", "yes"):
-    if all(_has_module(m) for m in ["cv2", "sklearn", "numpy"]):
+    vision_required_modules = ["cv2", "sklearn", "numpy"]
+    missing_vision_modules = [m for m in vision_required_modules if not _has_module(m)]
+    if missing_vision_modules:
+        logger.error("vision dependencies missing: %s", ", ".join(missing_vision_modules))
+        if settings.is_production:
+            raise RuntimeError("CRITICAL MVP FAILURE: vision dependencies missing.")
+    else:
         vision_router = _load_optional_router("routers.vision")
 wardrobe_capture_router = None
 if os.getenv("ENABLE_VISION", "false").lower() in ("1", "true", "yes"):
-    if all(_has_module(m) for m in ["cv2", "numpy", "PIL"]):
+    capture_required_modules = ["cv2", "numpy", "PIL"]
+    missing_capture_modules = [m for m in capture_required_modules if not _has_module(m)]
+    if missing_capture_modules:
+        logger.error("wardrobe_capture dependencies missing: %s", ", ".join(missing_capture_modules))
+        if settings.is_production:
+            raise RuntimeError("CRITICAL MVP FAILURE: wardrobe_capture dependencies missing.")
+    else:
         wardrobe_capture_router = _load_optional_router("routers.wardrobe_capture")
 
 garment_router = None
 if os.getenv("ENABLE_GARMENT_ANALYZER", "false").lower() in ("1", "true", "yes"):
-    if all(_has_module(m) for m in ["transformers", "PIL", "cv2", "sklearn", "numpy"]):
+    garment_required_modules = ["transformers", "PIL", "cv2", "sklearn", "numpy"]
+    missing_garment_modules = [m for m in garment_required_modules if not _has_module(m)]
+    if missing_garment_modules:
+        logger.error("garment_analyzer dependencies missing: %s", ", ".join(missing_garment_modules))
+        if settings.is_production:
+            raise RuntimeError("CRITICAL MVP FAILURE: garment_analyzer dependencies missing.")
+    else:
         garment_router = _load_optional_router("routers.garment_analyzer")
 
 
@@ -122,7 +151,10 @@ if _sentry_dsn and sentry_sdk and FastApiIntegration:
 # -------------------------
 app = FastAPI(
     title="AHVI AI Master Brain API",
-    version="2.2.0"
+    version="2.2.0",
+    docs_url="/docs" if settings.docs_enabled else None,
+    redoc_url="/redoc" if settings.docs_enabled else None,
+    openapi_url="/openapi.json" if settings.docs_enabled else None,
 )
 
 if RATE_LIMITING_AVAILABLE:
@@ -356,7 +388,11 @@ def root():
 
 @app.get("/health")
 def health_check():
-    return {"status": "online"}
+    return {
+        "status": "healthy",
+        "environment": settings.ENVIRONMENT,
+        "version": app.version,
+    }
 
 
 # -------------------------

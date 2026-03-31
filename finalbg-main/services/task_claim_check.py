@@ -10,7 +10,7 @@ from services.image_validation import validate_image_bytes
 from services.r2_storage import R2Storage, R2StorageError
 
 
-MAX_CLAIM_IMAGE_BYTES = 15 * 1024 * 1024
+MAX_CLAIM_IMAGE_BYTES = 5 * 1024 * 1024
 
 
 def decode_image_base64_payload(image_base64: str, *, max_bytes: int = MAX_CLAIM_IMAGE_BYTES) -> Tuple[bytes, str]:

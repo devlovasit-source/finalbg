@@ -1,25 +1,24 @@
-from fastapi import Request, HTTPException
+from fastapi import Depends, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from services.appwrite_service import account
+from services.appwrite_service import build_request_account
 
 
-async def get_current_user(request: Request):
+_bearer = HTTPBearer(auto_error=False)
+
+
+def get_current_user(credentials: HTTPAuthorizationCredentials | None = Depends(_bearer)):
     """
     Extracts user from Appwrite session JWT.
     """
-    auth_header = request.headers.get("authorization", "").strip()
-    if not auth_header:
+    if credentials is None or not credentials.credentials:
         raise HTTPException(status_code=401, detail="Missing Authorization header")
-    if not auth_header.lower().startswith("bearer "):
-        raise HTTPException(status_code=401, detail="Authorization header must be Bearer token")
 
     try:
-        parts = auth_header.split(" ", 1)
-        if len(parts) != 2 or not parts[1].strip():
+        token = credentials.credentials.strip()
+        if not token:
             raise HTTPException(status_code=401, detail="Malformed Authorization header")
-
-        token = parts[1].strip()
-        account.client.set_jwt(token)
+        account = build_request_account(token)
         user = account.get()
 
         return {

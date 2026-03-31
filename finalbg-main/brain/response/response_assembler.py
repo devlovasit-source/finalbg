@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 
 from brain.tone.tone_engine import tone_engine
 
@@ -118,19 +119,26 @@ class ResponseAssembler:
         cleaned = []
         question_count = 0
         for part in parts:
-            if not part:
+            if not part or not isinstance(part, str):
                 continue
+            
+            # Check for questions to respect the max_q limit
             if "?" in part:
                 if question_count >= max_q:
                     continue
                 question_count += 1
             cleaned.append(part)
 
-        final = "\n\n".join(cleaned)
-        sentences = final.split(". ")
+        # Join parts and split using regex to preserve punctuation
+        content = "\n\n".join(cleaned).strip()
+        
+        # Regex looks for punctuation (. ! ?) followed by whitespace
+        sentences = re.split(r'(?<=[.!?])\s+', content)
+        
         if len(sentences) > max_sent:
-            final = ". ".join(sentences[:max_sent])
-        return final.strip()
+            content = " ".join(sentences[:max_sent])
+            
+        return content.strip()
 
 
 response_assembler = ResponseAssembler()

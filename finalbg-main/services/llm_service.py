@@ -1,9 +1,14 @@
 import os
 import requests
+import re
+import time
+import json
+import hashlib
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from dotenv import load_dotenv
 
+from services.output_safety import sanitize_llm_output
 from brain.tone.tone_engine import tone_engine
 
 # =========================
@@ -24,6 +29,10 @@ MODEL_FALLBACKS = [
 ALLOW_HEAVY_MODELS = os.getenv("OLLAMA_ALLOW_HEAVY_MODELS", "false").lower() in {"1", "true", "yes"}
 DEFAULT_NUM_CTX = int(os.getenv("OLLAMA_NUM_CTX", "1024"))
 DEFAULT_NUM_PREDICT = int(os.getenv("OLLAMA_NUM_PREDICT", "220"))
+LLM_CACHE_ENABLED = os.getenv("LLM_CACHE_ENABLED", "true").lower() in {"1", "true", "yes"}
+LLM_CACHE_TTL_SECONDS = int(os.getenv("LLM_CACHE_TTL_SECONDS", "900"))
+LLM_CACHE_MAX_ENTRIES = int(os.getenv("LLM_CACHE_MAX_ENTRIES", "5000"))
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
 
 def _is_heavy_model(model_name: str) -> bool:
@@ -37,6 +46,96 @@ def _is_heavy_model(model_name: str) -> bool:
 session = requests.Session()
 retries = Retry(total=2, backoff_factor=0.5, status_forcelist=[500, 502, 503, 504])
 session.mount("http://", HTTPAdapter(max_retries=retries))
+
+_memory_cache: dict[str, tuple[str, float]] = {}
+
+
+def _semantic_fingerprint(text: str) -> str:
+    lowered = str(text or "").lower()
+    tokens = re.findall(r"[a-z0-9]+", lowered)
+    stop = {
+        "the", "a", "an", "is", "are", "to", "for", "of", "and", "in", "on",
+        "with", "please", "me", "my", "you", "your", "it", "this", "that",
+    }
+    compact = sorted({t for t in tokens if t and t not in stop})[:60]
+    if not compact:
+        compact = tokens[:30]
+    basis = " ".join(compact)
+    return hashlib.sha256(basis.encode("utf-8")).hexdigest()
+
+
+def _cache_key(kind: str, *, model: str, primary_text: str, extra: dict | None = None) -> str:
+    payload = {
+        "kind": kind,
+        "model": model,
+        "semantic": _semantic_fingerprint(primary_text),
+        "extra": extra or {},
+    }
+    raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return "llm_cache:" + hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _redis_get(key: str) -> str | None:
+    if not LLM_CACHE_ENABLED:
+        return None
+    try:
+        import redis
+
+        client = redis.Redis.from_url(REDIS_URL)
+        val = client.get(key)
+        if val is None:
+            return None
+        return val.decode("utf-8") if isinstance(val, (bytes, bytearray)) else str(val)
+    except Exception:
+        return None
+
+
+def _redis_set(key: str, value: str) -> None:
+    if not LLM_CACHE_ENABLED:
+        return
+    try:
+        import redis
+
+        client = redis.Redis.from_url(REDIS_URL)
+        client.setex(key, int(LLM_CACHE_TTL_SECONDS), value)
+    except Exception:
+        pass
+
+
+def _memory_get(key: str) -> str | None:
+    if not LLM_CACHE_ENABLED:
+        return None
+    row = _memory_cache.get(key)
+    if not row:
+        return None
+    value, expires_at = row
+    if time.time() > float(expires_at):
+        _memory_cache.pop(key, None)
+        return None
+    return value
+
+
+def _memory_set(key: str, value: str) -> None:
+    if not LLM_CACHE_ENABLED:
+        return
+    if len(_memory_cache) > max(100, LLM_CACHE_MAX_ENTRIES):
+        # opportunistic eviction of expired entries
+        now = time.time()
+        expired = [k for k, v in _memory_cache.items() if now > float(v[1])]
+        for k in expired[:1000]:
+            _memory_cache.pop(k, None)
+        if len(_memory_cache) > max(100, LLM_CACHE_MAX_ENTRIES):
+            _memory_cache.pop(next(iter(_memory_cache)))
+    _memory_cache[key] = (value, time.time() + float(LLM_CACHE_TTL_SECONDS))
+
+
+def _cache_get(key: str) -> str | None:
+    return _redis_get(key) or _memory_get(key)
+
+
+def _cache_set(key: str, value: str) -> None:
+    _redis_set(key, value)
+    _memory_set(key, value)
 
 
 def _model_candidates(requested_model: str | None) -> list[str]:
@@ -167,14 +266,25 @@ Guidelines:
     if options:
         payload["options"] = options
 
+    key = _cache_key(
+        "generate",
+        model=payload.get("model", DEFAULT_MODEL),
+        primary_text=prompt,
+        extra={"options": payload.get("options", {})},
+    )
+    cached = _cache_get(key)
+    if cached:
+        return sanitize_llm_output(cached)
+
     data = safe_request("generate", payload, timeout=30)
 
     if not data:
         return "none"
 
     response = data.get("response", "").strip() or "none"
+    _cache_set(key, response)
     response = tone_engine.apply(response, user_profile=user_profile, signals=signals)
-    return response
+    return sanitize_llm_output(response)
 
 
 # =========================
@@ -227,6 +337,21 @@ Rules:
         "stream": False,
     }
 
+    last_user = ""
+    for m in reversed(formatted_messages):
+        if str(m.get("role", "")).lower() == "user":
+            last_user = str(m.get("content", ""))
+            break
+    key = _cache_key(
+        "chat",
+        model=payload.get("model", DEFAULT_MODEL),
+        primary_text=last_user or json.dumps(formatted_messages[-2:], ensure_ascii=False),
+        extra={"system_instruction": system_instruction[:200]},
+    )
+    cached = _cache_get(key)
+    if cached:
+        return sanitize_llm_output(cached)
+
     data = safe_request("chat", payload, timeout=45)
 
     if not data:
@@ -234,8 +359,9 @@ Rules:
 
     try:
         response = data.get("message", {}).get("content", "").strip()
+        _cache_set(key, response)
         response = tone_engine.apply(response, user_profile=user_profile, signals=signals)
-        return response or "Something went wrong."
+        return sanitize_llm_output(response or "Something went wrong.")
     except Exception:
         return "AI response parsing failed."
 

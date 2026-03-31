@@ -107,7 +107,7 @@ def upload_avatar(request: AvatarUploadRequest):
     try:
         image_bytes = _decode_base64_image(
             request.image_base64,
-            max_bytes=8 * 1024 * 1024,
+            max_bytes=5 * 1024 * 1024,
             field_name="image_base64",
         )
         storage = R2Storage()
@@ -124,12 +124,12 @@ def upload_wardrobe_images(request: WardrobeUploadRequest):
     try:
         raw_bytes = _decode_base64_image(
             request.raw_image_base64,
-            max_bytes=12 * 1024 * 1024,
+            max_bytes=5 * 1024 * 1024,
             field_name="raw_image_base64",
         )
         masked_bytes = _decode_base64_image(
             request.masked_image_base64,
-            max_bytes=12 * 1024 * 1024,
+            max_bytes=5 * 1024 * 1024,
             field_name="masked_image_base64",
         )
         storage = R2Storage()
